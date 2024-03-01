@@ -6,7 +6,7 @@ from random import randint
 import concurrent.futures
 import subprocess
 
-# ANSI renk kodları
+# Renk kodları
 GREEN = '\033[92m'
 RED = '\033[91m'
 RESET = '\033[0m'
@@ -153,14 +153,14 @@ def dns_amplification_attack():
 def default_case():
     print("Geçersiz seçim. Lütfen geçerli bir seçenek seçin.")
 
-# Anahtarlar, seçeneklerin numaraları olacak
+# Atack türünün seçim yeri
 options = {
     1: http_get_flood,
     2: syn_flood,
     3: dns_amplification_attack
 }
 
-# Kullanıcıdan seçim yapılmasını iste
+# Kullanıcıdan seçim yapılmasını isteniliyor
 choice = int(input("Seçenekleri belirtin:\n1. Http_get_attack\n2. Syn_flood_attack\n3. Dns_amplification_attack\nLütfen seçiminizi yapın: "))
 
 # Seçime göre doğru fonksiyonu çağır
